@@ -26,18 +26,22 @@ class GaussianDiffusion:
         self.betas = betas
         self.alphas = 1.0 - self.betas
         self.alphas_cumprod = torch.cumprod(self.alphas, dim=0)
-
+        self.sqrt_alphas_cumprod = torch.sqrt(self.alphas_cumprod)
+        self.sqrt_one_minus_alphas_cumprod = torch.sqrt(1.0 - self.alphas_cumprod)
+        
         # previous cumulative product (prepend 1.0)
         self.alphas_cumprod_prev = torch.cat(
             [torch.tensor([1.0], dtype=self.alphas_cumprod.dtype), self.alphas_cumprod[:-1]]
         )
-
+        
         self.sqrt_recip_alphas = torch.sqrt(1.0 / self.alphas)
 
         # Calculations for diffusion q(x_t | x_{t-1}) and others
         self.sqrt_alphas_cumprod = torch.sqrt(self.alphas_cumprod)
         self.sqrt_one_minus_alphas_cumprod = torch.sqrt(1.0 - self.alphas_cumprod)
-
+        self.sqrt_recip_alphas_cumprod = torch.sqrt(1.0 / self.alphas_cumprod)
+        self.sqrt_recipm1_alphas_cumprod = torch.sqrt(1.0 / self.alphas_cumprod - 1.0)
+        
         # Calculations for posterior q(x_{t-1} | x_t, x_0)
         self.posterior_variance = self.betas * (1.0 - self.alphas_cumprod_prev) / (1.0 - self.alphas_cumprod)
     
@@ -72,25 +76,53 @@ class GaussianDiffusion:
         
         return loss
     
+    def predict_start_from_noise(self, x_t, t, noise):
+        """
+        Predicts x_0 from x_t and noise, and clips the result to [-1, 1] for stability.
+        """
+        # Note: You must have added self.sqrt_recip_alphas_cumprod in __init__
+        sqrt_recip_alphas_cumprod = extract(self.sqrt_recip_alphas_cumprod, t, x_t.shape)
+        sqrt_recipm1_alphas_cumprod = extract(self.sqrt_recipm1_alphas_cumprod, t, x_t.shape)
+        
+        # x_0_pred formula: x_0 = (1/sqrt(alpha_bar)) * x_t - (sqrt(1/alpha_bar - 1)) * noise
+        x_0_pred = sqrt_recip_alphas_cumprod * x_t - sqrt_recipm1_alphas_cumprod * noise
+        
+        # ***CRITICAL FIX: CLIP THE PREDICTED x_0 TO THE DATA RANGE [-1, 1]***
+        return torch.clamp(x_0_pred, -1.0, 1.0)
+    
     @torch.no_grad()
     def p_sample(self, model, x, t, t_index):
         """
-        Sample x_{t-1} from x_t using the model
+        Sample x_{t-1} from x_t using the model and CLIPPED x_0 prediction.
         """
-        betas_t = extract(self.betas, t, x.shape)
-        sqrt_one_minus_alphas_cumprod_t = extract(self.sqrt_one_minus_alphas_cumprod, t, x.shape)
-        sqrt_recip_alphas_t = extract(self.sqrt_recip_alphas, t, x.shape)
+        # 1. Predict Noise (epsilon)
+        model_output = model(x, t)
         
-        # Use our model to predict the noise
-        model_mean = sqrt_recip_alphas_t * (
-            x - betas_t * model(x, t) / sqrt_one_minus_alphas_cumprod_t
-        )
+        # 2. Predict and CLIP x_0 using the new helper function
+        x_0_pred_clipped = self.predict_start_from_noise(x, t, model_output)
+        
+        # 3. Compute the Denoising Mean (mu_theta) using the CLIPPED x_0
+        
+        # Extract necessary coefficients
+        betas_t = extract(self.betas, t, x.shape)
+        alphas_cumprod_prev_t = extract(self.alphas_cumprod_prev, t, x.shape)
+        alphas_t = extract(self.alphas, t, x.shape)
+        alphas_cumprod_t = extract(self.alphas_cumprod, t, x.shape)
+        
+        # Formula for the mean mu_theta (Eq 7 from DDPM paper, using clipped x_0)
+        # c0 = coef for x_0_pred; c1 = coef for x_t
+        c0 = betas_t * torch.sqrt(alphas_cumprod_prev_t) / (1.0 - alphas_cumprod_t)
+        c1 = torch.sqrt(alphas_t) * (1.0 - alphas_cumprod_prev_t) / (1.0 - alphas_cumprod_t)
+        
+        model_mean = c0 * x_0_pred_clipped + c1 * x
         
         if t_index == 0:
+            # At t=0, the mean is the final sample
             return model_mean
         else:
             posterior_variance_t = extract(self.posterior_variance, t, x.shape)
             noise = torch.randn_like(x)
+            # x_{t-1} = mu_theta + sigma_t * z
             return model_mean + torch.sqrt(posterior_variance_t) * noise
     
     @torch.no_grad()

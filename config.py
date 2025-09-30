@@ -6,7 +6,7 @@ import os
 
 # Training parameters
 BATCH_SIZE = 64  # Reduced for memory efficiency
-LEARNING_RATE = 2e-4
+LEARNING_RATE = 1e-3
 EPOCHS = 200
 DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
 NUM_WORKERS = 2
@@ -14,7 +14,7 @@ NUM_WORKERS = 2
 # Model parameters
 IMAGE_SIZE = 32
 CHANNELS = 1
-TIME_STEPS = 500
+TIME_STEPS = 1000
 
 # U-Net architecture parameters
 UNET_DIM = 32
