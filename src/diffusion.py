@@ -108,7 +108,7 @@ class GaussianDiffusion:
         return img
     
     @torch.no_grad()
-    def sample(self, model, image_size, batch_size=16, channels=3):
+    def sample(self, model, image_size, batch_size=16, channels=1):
         """
         Generate samples from the model
         """
@@ -134,7 +134,7 @@ class DDPMSampler:
     def __init__(self, diffusion_model):
         self.diffusion = diffusion_model
     
-    def sample(self, model, num_samples, image_size, channels=3, device='cuda'):
+    def sample(self, model, num_samples, image_size, channels=1, device='cuda'):
         """Generate samples"""
         model.eval()
         

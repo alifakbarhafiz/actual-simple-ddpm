@@ -11,11 +11,9 @@ def get_transforms():
     return transforms.Compose([
         transforms.Resize((config.IMAGE_SIZE, config.IMAGE_SIZE)),
         transforms.RandomHorizontalFlip(p=0.5),
-        transforms.Grayscale(num_output_channels=3),  # grayscale → RGB
         transforms.ToTensor(),
-        transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5])  # normalize to [-1, 1]
+        transforms.Normalize(mean=[0.5], std=[0.5])  # normalize to [-1, 1]
     ])
-
 
 def create_dataloader(train=True):
     """Create DataLoader for Fashion-MNIST (train or test set)"""
@@ -52,7 +50,7 @@ def test_dataset():
 
         # Inspect one batch from train
         train_batch, train_labels = next(iter(train_loader))
-        print(f"Train batch shape: {train_batch.shape}")  # [B, 3, H, W]
+        print(f"Train batch shape: {train_batch.shape}")  
         print(f"Train range: [{train_batch.min():.3f}, {train_batch.max():.3f}]")
 
         # Inspect one batch from test
@@ -65,7 +63,6 @@ def test_dataset():
     except Exception as e:
         print(f"Dataset test failed: {e}")
         raise
-
 
 if __name__ == "__main__":
     test_dataset()

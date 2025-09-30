@@ -5,15 +5,15 @@ import torch
 import os
 
 # Training parameters
-BATCH_SIZE = 32  # Reduced for memory efficiency
-LEARNING_RATE = 1e-4
-EPOCHS = 50
+BATCH_SIZE = 64  # Reduced for memory efficiency
+LEARNING_RATE = 2e-4
+EPOCHS = 200
 DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
 NUM_WORKERS = 2
 
 # Model parameters
 IMAGE_SIZE = 32
-CHANNELS = 3
+CHANNELS = 1
 TIME_STEPS = 500
 
 # U-Net architecture parameters
@@ -28,7 +28,7 @@ SCHEDULE_TYPE = 'cosine'  # 'linear' or 'cosine'
 
 # Paths
 DATA_PATH = '/content/data/fashion-mnist'
-CHECKPOINT_PATH = '/content/drive/MyDrive/ddpm_checkpoints_3'  # Save to Drive
+CHECKPOINT_PATH = '/content/drive/MyDrive/ddpm_checkpoints_4'  # Save to Drive
 OUTPUT_PATH = '/content/drive/MyDrive/ddpm_outputs'
 LOG_PATH = '/content/logs'
 

@@ -39,7 +39,7 @@ def generate_samples(model_path, num_samples=64, output_dir=None, use_ema=True):
         num_samples=num_samples,
         image_size=config.IMAGE_SIZE,
         channels=config.CHANNELS,
-        device=str(device)
+        device=str(device),
     )
     
     # Save samples

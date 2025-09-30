@@ -174,9 +174,9 @@ class UNet(nn.Module):
 
     def __init__(
         self,
-        in_channels: int = 3,
+        in_channels: int = 1,
         model_channels: int = 32,
-        out_channels: int = 3,
+        out_channels: int = 1,
         num_res_blocks: int = 2,
         attention_resolutions: tuple = (16, 8),
         channel_mult: tuple = (1, 2, 4, 8),
