@@ -10,9 +10,8 @@ def get_transforms():
     """Get data transforms for training & testing"""
     return transforms.Compose([
         transforms.Resize((config.IMAGE_SIZE, config.IMAGE_SIZE)),
-        transforms.RandomHorizontalFlip(p=0.5),
         transforms.ToTensor(),
-        transforms.Normalize(mean=[0.5], std=[0.5])  # normalize to [-1, 1]
+        transforms.Normalize(mean=[0.5], std=[0.5])  
     ])
 
 def create_dataloader(train=True):
@@ -27,7 +26,7 @@ def create_dataloader(train=True):
     dataloader = DataLoader(
         dataset,
         batch_size=config.BATCH_SIZE,
-        shuffle=train,  # shuffle only for training
+        shuffle=train,  
         num_workers=config.NUM_WORKERS,
         pin_memory=True,
         drop_last=True

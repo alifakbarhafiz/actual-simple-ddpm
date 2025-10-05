@@ -37,8 +37,6 @@ class GaussianDiffusion:
         self.sqrt_recip_alphas = torch.sqrt(1.0 / self.alphas)
 
         # Calculations for diffusion q(x_t | x_{t-1}) and others
-        self.sqrt_alphas_cumprod = torch.sqrt(self.alphas_cumprod)
-        self.sqrt_one_minus_alphas_cumprod = torch.sqrt(1.0 - self.alphas_cumprod)
         self.sqrt_recip_alphas_cumprod = torch.sqrt(1.0 / self.alphas_cumprod)
         self.sqrt_recipm1_alphas_cumprod = torch.sqrt(1.0 / self.alphas_cumprod - 1.0)
         
@@ -80,50 +78,44 @@ class GaussianDiffusion:
         """
         Predicts x_0 from x_t and noise, and clips the result to [-1, 1] for stability.
         """
-        # Note: You must have added self.sqrt_recip_alphas_cumprod in __init__
         sqrt_recip_alphas_cumprod = extract(self.sqrt_recip_alphas_cumprod, t, x_t.shape)
         sqrt_recipm1_alphas_cumprod = extract(self.sqrt_recipm1_alphas_cumprod, t, x_t.shape)
         
-        # x_0_pred formula: x_0 = (1/sqrt(alpha_bar)) * x_t - (sqrt(1/alpha_bar - 1)) * noise
         x_0_pred = sqrt_recip_alphas_cumprod * x_t - sqrt_recipm1_alphas_cumprod * noise
         
-        # ***CRITICAL FIX: CLIP THE PREDICTED x_0 TO THE DATA RANGE [-1, 1]***
         return torch.clamp(x_0_pred, -1.0, 1.0)
-    
-    @torch.no_grad()
+
     def p_sample(self, model, x, t, t_index):
-        """
-        Sample x_{t-1} from x_t using the model and CLIPPED x_0 prediction.
-        """
-        # 1. Predict Noise (epsilon)
-        model_output = model(x, t)
         
-        # 2. Predict and CLIP x_0 using the new helper function
-        x_0_pred_clipped = self.predict_start_from_noise(x, t, model_output)
-        
-        # 3. Compute the Denoising Mean (mu_theta) using the CLIPPED x_0
-        
-        # Extract necessary coefficients
         betas_t = extract(self.betas, t, x.shape)
-        alphas_cumprod_prev_t = extract(self.alphas_cumprod_prev, t, x.shape)
-        alphas_t = extract(self.alphas, t, x.shape)
+        sqrt_alphas_t = torch.sqrt(extract(self.alphas, t, x.shape))
+        sqrt_one_minus_alphas_cumprod_t = extract(self.sqrt_one_minus_alphas_cumprod, t, x.shape)
+        sqrt_recip_alphas_cumprod_t = extract(self.sqrt_recip_alphas_cumprod, t, x.shape)
+        sqrt_recipm1_alphas_cumprod_t = extract(self.sqrt_recipm1_alphas_cumprod, t, x.shape)
+
+        # Predict noise using the model
+        noise_pred = model(x, t)
+
+        # Estimate x_0
+        x_0_pred = sqrt_recip_alphas_cumprod_t * x - sqrt_recipm1_alphas_cumprod_t * noise_pred
+        x_0_pred_clipped = torch.clamp(x_0_pred, -1.0, 1.0)
+
         alphas_cumprod_t = extract(self.alphas_cumprod, t, x.shape)
-        
-        # Formula for the mean mu_theta (Eq 7 from DDPM paper, using clipped x_0)
-        # c0 = coef for x_0_pred; c1 = coef for x_t
-        c0 = betas_t * torch.sqrt(alphas_cumprod_prev_t) / (1.0 - alphas_cumprod_t)
-        c1 = torch.sqrt(alphas_t) * (1.0 - alphas_cumprod_prev_t) / (1.0 - alphas_cumprod_t)
-        
-        model_mean = c0 * x_0_pred_clipped + c1 * x
-        
+        alphas_cumprod_prev_t = extract(self.alphas_cumprod_prev, t, x.shape)
+
+        coef_x0 = (torch.sqrt(alphas_cumprod_prev_t) * betas_t) / (1.0 - alphas_cumprod_t)
+        coef_xt = (sqrt_alphas_t * (1.0 - alphas_cumprod_prev_t)) / (1.0 - alphas_cumprod_t)
+
+        # Mean of q(x_{t-1} | x_t, x_0)
+        model_mean = coef_x0 * x_0_pred_clipped + coef_xt * x
+
         if t_index == 0:
-            # At t=0, the mean is the final sample
             return model_mean
         else:
             posterior_variance_t = extract(self.posterior_variance, t, x.shape)
             noise = torch.randn_like(x)
-            # x_{t-1} = mu_theta + sigma_t * z
             return model_mean + torch.sqrt(posterior_variance_t) * noise
+
     
     @torch.no_grad()
     def p_sample_loop(self, model, shape, device):
@@ -131,7 +123,6 @@ class GaussianDiffusion:
         Generate samples by running the reverse process
         """
         b = shape[0]
-        # Start from pure noise
         img = torch.randn(shape, device=device)
         
         for i in tqdm(reversed(range(0, self.timesteps)), desc='Sampling', total=self.timesteps):
@@ -157,6 +148,8 @@ class GaussianDiffusion:
         self.sqrt_alphas_cumprod = self.sqrt_alphas_cumprod.to(device)
         self.sqrt_one_minus_alphas_cumprod = self.sqrt_one_minus_alphas_cumprod.to(device)
         self.posterior_variance = self.posterior_variance.to(device)
+        self.sqrt_recip_alphas_cumprod = self.sqrt_recip_alphas_cumprod.to(device)
+        self.sqrt_recipm1_alphas_cumprod = self.sqrt_recipm1_alphas_cumprod.to(device)
         return self
 
 
@@ -171,9 +164,8 @@ class DDPMSampler:
         model.eval()
         
         with torch.no_grad():
-            # Generate samples in batches to avoid memory issues
             all_samples = []
-            batch_size = min(num_samples, 16)  # Process in batches
+            batch_size = min(num_samples, 16)  
             
             for i in range(0, num_samples, batch_size):
                 current_batch_size = min(batch_size, num_samples - i)
@@ -222,7 +214,6 @@ def test_diffusion():
     print(f"Noisy shape: {x_noisy.shape}")
     print(f"Time steps shape: {t.shape}")
     
-    # Test that noise level increases with time
     t_early = torch.zeros(batch_size, dtype=torch.long).to(device)
     t_late = torch.full((batch_size,), config.TIME_STEPS - 1, dtype=torch.long).to(device)
     
@@ -239,7 +230,6 @@ def test_diffusion():
     print("Diffusion test passed!")
     
     return diffusion
-
 
 if __name__ == "__main__":
     test_diffusion()

@@ -2,7 +2,6 @@
 Evaluation script for Simple DDPM on Fashion-MNIST
 Computes FID, Inception Score, and shows sample grid.
 """
-
 import os
 import torch
 from torchvision.utils import make_grid
@@ -22,16 +21,15 @@ from torch.utils.data import DataLoader
 # ---------------------------
 DEVICE = get_device()
 BATCH_SIZE = 64
-NUM_SAMPLES = 1000  # Number of images to generate for evaluation
+NUM_SAMPLES = 1000  
 
 # ---------------------------
 # Load test dataset
 # ---------------------------
-# IMPORTANT: Match the training transforms (without data augmentation)
 transform = transforms.Compose([
     transforms.Resize((config.IMAGE_SIZE, config.IMAGE_SIZE)),
     transforms.ToTensor(),
-    transforms.Normalize(mean=[0.5], std=[0.5])  # Same as training: normalize to [-1, 1]
+    transforms.Normalize(mean=[0.5], std=[0.5])  
 ])
 
 test_dataset = datasets.FashionMNIST(root=config.DATA_PATH, train=False, download=True, transform=transform)
@@ -66,8 +64,6 @@ def generate_samples(num_samples=NUM_SAMPLES):
         channels=config.CHANNELS,
         device=str(DEVICE)  
     )
-    # Samples are in [-1, 1] range from the model
-    # Map back to [0,1] for metrics and visualization
     samples = unnormalize_to_zero_to_one(samples)
     samples = torch.clamp(samples, 0., 1.)
     
@@ -83,11 +79,9 @@ def prepare_images_for_metrics(images):
     Convert grayscale to 3-channel RGB and denormalize to [0,1] for Inception metrics.
     Input images are expected to be in [-1, 1] range.
     """
-    # Denormalize from [-1, 1] to [0, 1]
     images = (images + 1.0) / 2.0
     images = torch.clamp(images, 0., 1.)
     
-    # Convert grayscale to RGB
     if images.shape[1] == 1:
         images = images.repeat(1, 3, 1, 1)
     return images
@@ -108,7 +102,6 @@ with torch.no_grad():
 
 # Update with generated images in batches
 print("Processing generated images for FID...")
-# Generated images are already in [0, 1], just need to convert to RGB
 gen_rgb = generated_images
 if gen_rgb.shape[1] == 1:
     gen_rgb = gen_rgb.repeat(1, 3, 1, 1)

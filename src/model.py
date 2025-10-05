@@ -17,11 +17,9 @@ class SinusoidalPositionEmbeddings(nn.Module):
     def forward(self, time: torch.Tensor) -> torch.Tensor:
         device = time.device
         half_dim = self.dim // 2
-        # frequency term
         inv_freq = math.log(10000) / (half_dim - 1)
         inv_freq = torch.exp(torch.arange(half_dim, device=device) * -inv_freq)
-        # time: (B,)
-        emb = time[:, None].float() * inv_freq[None, :]  # (B, half_dim)
+        emb = time[:, None].float() * inv_freq[None, :]  
         emb = torch.cat((emb.sin(), emb.cos()), dim=-1)
         return emb
 
@@ -31,7 +29,6 @@ class ConvBlock(nn.Module):
     def __init__(self, in_channels: int, out_channels: int, groups: int = 8):
         super().__init__()
         self.conv = nn.Conv2d(in_channels, out_channels, 3, padding=1)
-        # ensure groups does not exceed channels and is >=1
         gn = max(1, min(groups, out_channels))
         self.norm = nn.GroupNorm(gn, out_channels)
         self.act = nn.SiLU()
@@ -45,23 +42,19 @@ class ResidualBlock(nn.Module):
     def __init__(self, in_channels: int, out_channels: int, time_emb_dim: int, groups: int = 8):
         super().__init__()
 
-        # Time embedding projection -> produce out_channels features to add spatially
         self.time_mlp = nn.Sequential(
             nn.SiLU(),
             nn.Linear(time_emb_dim, out_channels)
         )
 
-        # Convolution blocks: first brings in_channels -> out_channels
         self.block1 = ConvBlock(in_channels, out_channels, groups)
         self.block2 = ConvBlock(out_channels, out_channels, groups)
 
-        # Residual connection (1x1 conv if channel mismatch)
         self.residual = nn.Conv2d(in_channels, out_channels, 1) if in_channels != out_channels else nn.Identity()
 
     def forward(self, x: torch.Tensor, time_emb: torch.Tensor) -> torch.Tensor:
         h = self.block1(x)
 
-        # Add time embedding (B, out_channels) -> (B, out_channels, 1, 1)
         time_emb_proj = self.time_mlp(time_emb)[:, :, None, None]
         h = h + time_emb_proj
 
@@ -105,20 +98,16 @@ class DownBlock(nn.Module):
     def __init__(self, in_channels: int, out_channels: int, time_emb_dim: int,
                  has_attn: bool = False, groups: int = 8):
         super().__init__()
-        # first residual maps in_channels -> out_channels
         self.resnet1 = ResidualBlock(in_channels, out_channels, time_emb_dim, groups)
-        # second residual keeps out_channels
         self.resnet2 = ResidualBlock(out_channels, out_channels, time_emb_dim, groups)
         self.attn = AttentionBlock(out_channels, groups) if has_attn else nn.Identity()
-        # downsample keeps out_channels but halves spatial size
         self.downsample = nn.Conv2d(out_channels, out_channels, 3, stride=2, padding=1)
 
     def forward(self, x: torch.Tensor, time_emb: torch.Tensor):
-        h1 = self.resnet1(x, time_emb)   # for skip1
-        h2 = self.resnet2(h1, time_emb)  # for skip2 (after two res blocks)
+        h1 = self.resnet1(x, time_emb)   
+        h2 = self.resnet2(h1, time_emb)  
         h2 = self.attn(h2)
         out = self.downsample(h2)
-        # return (downsampled, skip1, skip2)
         return out, h1, h2
 
 class UpBlock(nn.Module):
@@ -127,28 +116,15 @@ class UpBlock(nn.Module):
     def __init__(self, in_channels: int, out_channels: int, time_emb_dim: int,
                  has_attn: bool = False, groups: int = 8):
         super().__init__()
-        # after upsample, we'll concatenate skip2 (which has out_channels) -> channels = up_out + out_channels
-        # but to keep things consistent, we expect 'in_channels' to be the current channels before upsample.
-        # We'll implement pattern: upsample (in_channels -> out_channels), then residuals that accept concatenations.
         self.upsample = nn.ConvTranspose2d(in_channels, out_channels, 3, stride=2, padding=1, output_padding=1)
-
-        # After upsample, we will concatenate with skip2 and skip1 in sequence:
-        # 1) resnet1 consumes (out_channels + skip2_channels) -> produce out_channels
-        #    assume skip2_channels == out_channels (as produced by DownBlock)
         self.resnet1 = ResidualBlock(out_channels + out_channels, out_channels, time_emb_dim, groups)
-        # 2) resnet2 consumes (out_channels + skip1_channels) -> produce out_channels
-        #    assume skip1_channels == some channels that equals out_channels (consistent layout)
         self.resnet2 = ResidualBlock(out_channels + out_channels, out_channels, time_emb_dim, groups)
-
         self.attn = AttentionBlock(out_channels, groups) if has_attn else nn.Identity()
 
     def forward(self, x: torch.Tensor, skip1: torch.Tensor, skip2: torch.Tensor, time_emb: torch.Tensor) -> torch.Tensor:
-        # upsample first
-        x = self.upsample(x)  # now has out_channels
-        # concat with skip2 (the later skip)
+        x = self.upsample(x)  
         h = torch.cat([x, skip2], dim=1)
         h = self.resnet1(h, time_emb)
-        # concat with skip1 (the earlier skip)
         h = torch.cat([h, skip1], dim=1)
         h = self.resnet2(h, time_emb)
         h = self.attn(h)
@@ -203,7 +179,7 @@ class UNet(nn.Module):
         # Initial convolution
         self.input_conv = nn.Conv2d(in_channels, model_channels, 3, padding=1)
 
-        # Use channel_mult directly (no extra leading 1)
+        # Use channel_mult directly 
         ch_mult = list(self.channel_mult)
         self.num_resolutions = len(ch_mult)
 
@@ -214,9 +190,6 @@ class UNet(nn.Module):
 
         for level in range(self.num_resolutions):
             out_ch = model_channels * ch_mult[level]
-            # each level: num_res_blocks residual blocks (we implement one DownBlock per level)
-            # Note: To keep your original interface, we append one DownBlock per level that applies
-            # two residuals and then downsamples.
             has_attn = (64 // (2 ** level)) in attention_resolutions
             self.down_blocks.append(
                 DownBlock(ch, out_ch, time_embed_dim, has_attn, num_groups)
@@ -230,8 +203,7 @@ class UNet(nn.Module):
         # Build up blocks (reverse of down)
         self.up_blocks = nn.ModuleList()
         for level in reversed(range(self.num_resolutions)):
-            out_ch = model_channels * ch_mult[level]  # target channels after up block
-            # UpBlock expects current channels (ch) -> will upsample to out_ch and produce out_ch
+            out_ch = model_channels * ch_mult[level]  
             has_attn = (64 // (2 ** level)) in attention_resolutions
             self.up_blocks.append(
                 UpBlock(ch, out_ch, time_embed_dim, has_attn, num_groups)
@@ -269,7 +241,6 @@ class UNet(nn.Module):
 
         # Upsampling
         for up_block in self.up_blocks:
-            # pop skip2 then skip1 (they were appended in that order)
             skip2 = skip_connections.pop()
             skip1 = skip_connections.pop()
             h = up_block(h, skip1, skip2, time_emb)
@@ -296,14 +267,12 @@ def test_model():
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     model = model.to(device)
 
-    # Count parameters
     total_params = sum(p.numel() for p in model.parameters())
     trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
 
     print(f"Total parameters: {total_params:,}")
     print(f"Trainable parameters: {trainable_params:,}")
 
-    # Test forward pass
     batch_size = 4
     x = torch.randn(batch_size, config.CHANNELS, config.IMAGE_SIZE, config.IMAGE_SIZE).to(device)
     t = torch.randint(0, 1000, (batch_size,)).to(device)

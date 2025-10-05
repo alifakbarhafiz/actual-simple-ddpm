@@ -67,7 +67,6 @@ def train_one_epoch(model, diffusion, dataloader, optimizer, device, epoch, writ
     
     return total_loss / num_batches
 
-
 @torch.no_grad()
 def sample_and_save(model, diffusion, device, epoch, writer=None):
     """Generate and save samples"""
@@ -133,8 +132,8 @@ def main():
     start_epoch = 0
     losses = []
     best_loss = float('inf')
-    epoch = start_epoch  # Ensure epoch is always defined
-    avg_loss = None  # Ensure avg_loss is always defined
+    epoch = start_epoch  
+    avg_loss = None  
     
     # Load checkpoint if exists
     checkpoint_path = os.path.join(config.CHECKPOINT_PATH, 'latest.pth')
@@ -142,7 +141,7 @@ def main():
         print("Loading checkpoint...")
         start_epoch, best_loss = load_checkpoint(model, optimizer, checkpoint_path, device)
         start_epoch += 1
-        epoch = start_epoch  # Update epoch if checkpoint is loaded
+        epoch = start_epoch  
     
     # Training loop
     print(f"Starting training from epoch {start_epoch}...")
@@ -169,11 +168,14 @@ def main():
                     best_loss = avg_loss
                     save_path = os.path.join(config.CHECKPOINT_PATH, 'best.pth')
                     print(f"New best loss: {best_loss:.6f}")
+                    
+                    ema.apply_shadow()
+                    save_checkpoint(model, optimizer, epoch, avg_loss, save_path)
+                    ema.restore()
                 else:
                     save_path = os.path.join(config.CHECKPOINT_PATH, 'latest.pth')
-                
-                save_checkpoint(model, optimizer, epoch, avg_loss, save_path)
-            
+                    save_checkpoint(model, optimizer, epoch, avg_loss, save_path)
+
             # Generate samples
             if epoch % config.SAMPLE_EVERY == 0 or epoch == config.EPOCHS - 1:
                 # Use EMA weights for sampling
@@ -210,7 +212,6 @@ def main():
         writer.close()
         
         print("Training completed!")
-
 
 if __name__ == "__main__":
     main()

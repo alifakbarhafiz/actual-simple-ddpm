@@ -25,9 +25,8 @@ def extract(a, t, x_shape):
     Extract values from a 1-D tensor `a` at positions `t` (batch of indices),
     and reshape to match x_shape for broadcasting.
     """
-    # Ensure t has correct shape and is on the same device
     b = t.shape[0]
-    out = a.gather(-1, t.to(a.device))  # FIX: keep on same device
+    out = a.gather(-1, t.to(a.device))  
     return out.reshape(b, *((1,) * (len(x_shape) - 1)))
 
 
@@ -73,13 +72,10 @@ def save_image_grid(images, path, nrow=8, normalize=True):
     if normalize:
         images = unnormalize_to_zero_to_one(images)
     
-    # Ensure images are in [0, 1] range
     images = torch.clamp(images, 0., 1.)
     
-    # Create directory if it doesn't exist
     Path(path).parent.mkdir(parents=True, exist_ok=True)
     
-    # Save grid
     vutils.save_image(images, path, nrow=nrow, padding=2, pad_value=1)
 
 
@@ -142,7 +138,6 @@ class EMA:
         self.shadow = {}
         self.backup = {}
         
-        # Initialize shadow parameters
         for name, param in model.named_parameters():
             if param.requires_grad:
                 self.shadow[name] = param.data.clone()
@@ -167,7 +162,6 @@ class EMA:
                 param.data = self.backup[name]
         self.backup = {}
 
-
 def setup_logging():
     """Setup logging directory"""
     from torch.utils.tensorboard import SummaryWriter
@@ -184,14 +178,11 @@ def log_images_to_tensorboard(writer, images, step, tag="samples", nrow=8):
     import torchvision.utils as vutils
     
     if isinstance(images, torch.Tensor):
-        # Normalize to [0, 1]
         images = unnormalize_to_zero_to_one(images)
         images = torch.clamp(images, 0., 1.)
         
-        # Create grid
         grid = vutils.make_grid(images, nrow=nrow, padding=2, pad_value=1)
         
-        # Log to tensorboard
         writer.add_image(tag, grid, step)
 
 
@@ -212,14 +203,11 @@ def get_device():
 
 
 if __name__ == "__main__":
-    # Test utilities
     print("Testing utilities...")
     
-    # Test device detection
     device = get_device()
     print(f"Device: {device}")
     
-    # Test beta schedules
     linear_betas = linear_beta_schedule(1000)
     cosine_betas = cosine_beta_schedule(1000)
     print(f"Linear betas range: {linear_betas.min():.6f} - {linear_betas.max():.6f}")

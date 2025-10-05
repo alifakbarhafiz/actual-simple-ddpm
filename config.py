@@ -5,7 +5,7 @@ import torch
 import os
 
 # Training parameters
-BATCH_SIZE = 64  # Reduced for memory efficiency
+BATCH_SIZE = 64  
 LEARNING_RATE = 1e-3
 EPOCHS = 200
 DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
@@ -28,19 +28,19 @@ SCHEDULE_TYPE = 'cosine'  # 'linear' or 'cosine'
 
 # Paths
 DATA_PATH = '/content/data/fashion-mnist'
-CHECKPOINT_PATH = '/content/drive/MyDrive/ddpm_checkpoints_4'  # Save to Drive
+CHECKPOINT_PATH = '/content/drive/MyDrive/ddpm_checkpoints_4'  
 OUTPUT_PATH = '/content/drive/MyDrive/ddpm_outputs'
 LOG_PATH = '/content/logs'
 
 # Training settings
-SAVE_EVERY = 5  # Save more frequently
+SAVE_EVERY = 5  
 SAMPLE_EVERY = 10
 LOG_EVERY = 50
 GRAD_CLIP = 1.0
 
 # Sampling parameters
-NUM_SAMPLES = 64  # Number of samples to generate
-SAMPLE_GRID_SIZE = 8  # 8x8 grid
+NUM_SAMPLES = 64  
+SAMPLE_GRID_SIZE = 8  
 
 # Create directories if they don't exist
 os.makedirs(CHECKPOINT_PATH, exist_ok=True)
