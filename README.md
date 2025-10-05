@@ -4,7 +4,7 @@
 
 A clean, minimal implementation of Denoising Diffusion Probabilistic Models (DDPM) for image generation on Fashion-MNIST.
 
-<img src="path/to/your/generated_samples_grid.png" alt="Generated Fashion-MNIST Samples" width="400">
+<img src="outputs/generated_grid.png" alt="Generated Fashion-MNIST Samples" width="400">
 
 *Sample grid of generated Fashion-MNIST images after training*
 
@@ -424,4 +424,5 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 If you find this implementation helpful, please consider giving it a ⭐!
 
 For questions or issues, please open an issue on GitHub.
+
 
